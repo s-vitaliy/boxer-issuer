@@ -17,6 +17,11 @@ use std::collections::HashMap;
 use std::io::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+use crate::http::urls;
+use utoipa_actix_web::AppExt;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
@@ -35,6 +40,21 @@ async fn main() -> Result<()> {
     let policy_attachments_repository: Arc<PolicyAttachmentRepository> = Arc::new(RwLock::new(HashMap::new()));
     let identity_repository: Arc<IdentityRepository> = Arc::new(RwLock::new(HashMap::new()));
 
+    #[derive(OpenApi)]
+    #[openapi(paths(
+        urls::token,
+        urls::post_policy,
+        urls::get_policy,
+        urls::delete_policy,
+        urls::post_identity,
+        urls::get_identity,
+        urls::delete_identity,
+        urls::post_policy_attachment,
+        urls::get_policy_attachment,
+        urls::delete_policy_attachment,
+    ))]
+    struct ApiDoc;
+
     info!("listening on {}:{}", &addr.0, &addr.1);
     HttpServer::new(move || {
         let token_provider = Arc::new(TokenService::new(
@@ -44,6 +64,7 @@ async fn main() -> Result<()> {
             Arc::clone(&secret),
         ));
         App::new()
+            .into_utoipa_app()
             // Application services
             .app_data(Data::new(token_provider))
             .app_data(Data::new(policy_repository.clone()))
@@ -63,6 +84,9 @@ async fn main() -> Result<()> {
             .service(post_policy_attachment)
             .service(get_policy_attachment)
             .service(delete_policy_attachment)
+            // Swagger UI
+            .into_app()
+            .service(SwaggerUi::new("/swagger/{_:.*}").url("/api-docs/openapi.json", ApiDoc::openapi()))
     })
     .bind(addr)?
     .run()
