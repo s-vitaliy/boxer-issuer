@@ -1,3 +1,4 @@
+pub mod backends;
 pub mod base;
 /// This module contains services abstracted from the Actix web server.
 pub mod configuration_manager;
