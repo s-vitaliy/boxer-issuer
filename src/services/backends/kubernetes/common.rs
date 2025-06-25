@@ -5,7 +5,7 @@ use anyhow::{anyhow, Error};
 use futures::future::Ready;
 use futures::StreamExt;
 use k8s_openapi::NamespaceResourceScope;
-use kube::api::{DeleteParams, PostParams};
+use kube::api::PostParams;
 use kube::runtime::reflector::{ObjectRef, Store};
 use kube::runtime::watcher::Config;
 use kube::runtime::{reflector, watcher, WatchStreamExt};
@@ -90,14 +90,6 @@ where
                 .map(|_| ())
                 .map_err(|e| anyhow!("Failed to create resource: {}", e))
         }
-    }
-
-    pub async fn delete(&self, name: &str) -> Result<(), Error> {
-        self.api
-            .delete(&name, &DeleteParams::default())
-            .await
-            .map(|_| ())
-            .map_err(|e| anyhow!("Failed to update resource: {}", e))
     }
 
     pub fn get(&self, object_ref: ObjectRef<S>) -> Result<Arc<S>, Error> {
