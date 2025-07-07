@@ -16,9 +16,8 @@ use std::{println as warn, println as debug};
 
 // Other imports
 use crate::models::principal::Principal;
-use crate::services::backends::kubernetes::common::{
-    KubernetesResourceManager, KubernetesResourceManagerConfig, ResourceUpdateHandler,
-};
+use crate::services::backends::kubernetes::common::synchronized_kubernetes_resource_manager::SynchronizedKubernetesResourceManager;
+use crate::services::backends::kubernetes::common::{KubernetesResourceManagerConfig, ResourceUpdateHandler};
 use crate::services::base::upsert_repository::{PrincipalIdentity, UpsertRepository};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
@@ -66,7 +65,7 @@ impl PrincipalConfigMap {
 }
 
 pub struct KubernetesPrincipalRepository {
-    resource_manager: KubernetesResourceManager<PrincipalConfigMap>,
+    resource_manager: SynchronizedKubernetesResourceManager<PrincipalConfigMap>,
     label_selector_key: String,
     label_selector_value: String,
 }
@@ -76,7 +75,7 @@ impl KubernetesPrincipalRepository {
     pub async fn start(config: KubernetesResourceManagerConfig) -> anyhow::Result<Self> {
         let label_selector_key = config.label_selector_key.clone();
         let label_selector_value = config.label_selector_value.clone();
-        let resource_manager = KubernetesResourceManager::start(config, Arc::new(UpdateHandler)).await?;
+        let resource_manager = SynchronizedKubernetesResourceManager::start(config, Arc::new(UpdateHandler)).await?;
         Ok(KubernetesPrincipalRepository {
             resource_manager,
             label_selector_key,
