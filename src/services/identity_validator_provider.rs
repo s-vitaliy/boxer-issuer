@@ -1,5 +1,6 @@
 use crate::models::api::external::identity_provider::ExternalIdentityProvider;
 use crate::models::api::external::identity_provider_settings::OidcExternalIdentityProviderSettings;
+use crate::services::backends::base::IdentityProviderBackend;
 use crate::services::external_identity_validator::{ExternalIdentityValidator, ExternalIdentityValidatorFactory};
 use anyhow::bail;
 use async_trait::async_trait;
@@ -10,8 +11,8 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 /// Creates a new external identity validation service.
-pub fn new() -> ExternalIdentityValidationService {
-    ExternalIdentityValidationService::new()
+pub fn new(backend: Arc<dyn IdentityProviderBackend>) -> ExternalIdentityValidationService {
+    ExternalIdentityValidationService::new(backend)
 }
 
 /// Write-only interface for managing external identity validators.
@@ -42,6 +43,7 @@ pub trait ExternalIdentityValidatorProvider {
 
 pub struct ExternalIdentityValidationService {
     validators: RwLock<HashMap<ExternalIdentityProvider, Arc<dyn ExternalIdentityValidator + Send + Sync>>>,
+    backend: Arc<dyn IdentityProviderBackend>,
 }
 
 #[async_trait]
@@ -67,8 +69,15 @@ impl ExternalIdentityValidatorManager for ExternalIdentityValidationService {
     ) -> Result<(), anyhow::Error> {
         let mut write_guard = self.validators.write().await;
         let validator = settings.build_validator(provider.name()).await?;
+        self.ensure_backend_is_configured(provider.name()).await?;
         let _ = (*write_guard).insert(provider, validator);
         Ok(())
+    }
+}
+
+impl ExternalIdentityValidationService {
+    async fn ensure_backend_is_configured(&self, provider_name: String) -> Result<(), anyhow::Error> {
+        self.backend.register_identity_provider(provider_name).await
     }
 }
 
@@ -80,7 +89,7 @@ where
     async fn watch_for_identity_providers(self) {
         let provider = ExternalIdentityProvider::from("provider".to_string());
         let settings = OidcExternalIdentityProviderSettings {
-            user_id_claim: "upn".to_string(),
+            user_id_claim: "preferred_username".to_string(),
             discovery_url: "http://localhost:8080/realms/master/".to_string(),
             issuers: vec!["http://localhost:8080/realms/master".to_string()],
             audiences: vec!["account".to_string()],
@@ -97,8 +106,8 @@ where
 }
 
 impl ExternalIdentityValidationService {
-    fn new() -> Self {
+    fn new(backend: Arc<dyn IdentityProviderBackend>) -> Self {
         let validators = RwLock::new(HashMap::new());
-        ExternalIdentityValidationService { validators }
+        ExternalIdentityValidationService { validators, backend }
     }
 }

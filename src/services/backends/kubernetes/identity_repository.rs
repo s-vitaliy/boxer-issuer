@@ -25,6 +25,9 @@ use log::{debug, warn};
 use futures::future::Ready;
 
 // Workaround to use prinltn! for logs.
+use crate::services::backends::kubernetes::models;
+use crate::services::backends::kubernetes::models::base::WithMetadata;
+use maplit::btreemap;
 #[cfg(test)]
 use std::{println as warn, println as debug};
 
@@ -41,15 +44,41 @@ struct IdentitiesConfigMap {
     data: ExternalIdentitiesSet,
 }
 
+impl Default for IdentitiesConfigMap {
+    fn default() -> Self {
+        IdentitiesConfigMap {
+            metadata: ObjectMeta::default(),
+            data: ExternalIdentitiesSet {
+                active: "[]".to_string(),
+                inactive: "[]".to_string(),
+            },
+        }
+    }
+}
+
+impl WithMetadata<ObjectMeta> for IdentitiesConfigMap {
+    fn with_metadata(mut self, metadata: ObjectMeta) -> Self {
+        self.metadata = metadata;
+        self
+    }
+}
+
 pub struct KubernetesIdentityRepository {
     resource_manager: SynchronizedKubernetesResourceManager<IdentitiesConfigMap>,
+    label_selector_key: String,
+    label_selector_value: String,
 }
 
 impl KubernetesIdentityRepository {
-    #[allow(dead_code)] // Dead code is allowed here because this function is used in kubernetes
     pub async fn start(config: KubernetesResourceManagerConfig) -> Result<Self> {
+        let label_selector_key = config.label_selector_key.clone();
+        let label_selector_value = config.label_selector_value.clone();
         let resource_manager = SynchronizedKubernetesResourceManager::start(config, Arc::new(UpdateHandler)).await?;
-        Ok(KubernetesIdentityRepository { resource_manager })
+        Ok(KubernetesIdentityRepository {
+            resource_manager,
+            label_selector_key,
+            label_selector_value,
+        })
     }
 
     async fn get_identities(&self, provider: &str) -> Result<Arc<IdentitiesConfigMap>> {
@@ -88,6 +117,22 @@ impl KubernetesIdentityRepository {
         };
         updated_configmap.metadata.resource_version = None;
         self.resource_manager.replace(provider, updated_configmap).await
+    }
+
+    pub async fn try_register_identity_provider(&self, provider: &str) -> Result<()> {
+        let name = provider.to_string();
+        let namespace = self.resource_manager.namespace().clone();
+        let labels = btreemap! {
+            self.label_selector_key.clone() => self.label_selector_value.clone()
+        };
+        match self.get_identities(provider).await {
+            Ok(_) => Ok(()),
+            _ => {
+                self.resource_manager
+                    .replace(provider, models::empty(name, namespace, labels))
+                    .await
+            }
+        }
     }
 }
 

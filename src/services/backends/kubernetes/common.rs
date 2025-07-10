@@ -47,7 +47,6 @@ impl KubernetesResourceManagerConfig {
         }
     }
 }
-
 pub struct KubernetesResourceManager<StoredObject>
 where
     StoredObject: Resource + 'static,

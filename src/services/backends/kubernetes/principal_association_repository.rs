@@ -14,6 +14,8 @@ use std::{println as warn, println as debug};
 use crate::models::api::external::identity::ExternalIdentity;
 use crate::services::backends::kubernetes::common::synchronized_kubernetes_resource_manager::SynchronizedKubernetesResourceManager;
 use crate::services::backends::kubernetes::common::{KubernetesResourceManagerConfig, ResourceUpdateHandler};
+use crate::services::backends::kubernetes::models;
+use crate::services::backends::kubernetes::models::base::WithMetadata;
 use crate::services::base::upsert_repository::{PrincipalIdentity, UpsertRepository};
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -40,6 +42,25 @@ struct PrincipalAssociationData {
 struct PrincipalAssociationConfigMap {
     metadata: ObjectMeta,
     data: PrincipalAssociationData,
+}
+
+impl Default for PrincipalAssociationConfigMap {
+    fn default() -> Self {
+        PrincipalAssociationConfigMap {
+            metadata: ObjectMeta::default(),
+            data: PrincipalAssociationData {
+                active: "{}".to_string(),
+                inactive: "{}".to_string(),
+            },
+        }
+    }
+}
+
+impl WithMetadata<ObjectMeta> for PrincipalAssociationConfigMap {
+    fn with_metadata(mut self, metadata: ObjectMeta) -> Self {
+        self.metadata = metadata;
+        self
+    }
 }
 
 impl PrincipalAssociationConfigMap {
@@ -149,7 +170,16 @@ impl UpsertRepository<ExternalIdentity, PrincipalIdentity> for KubernetesPrincip
     }
 
     async fn upsert(&self, key: ExternalIdentity, principal: PrincipalIdentity) -> Result<(), Self::Error> {
-        let configmap = self.get_entities(key.clone()).await?;
+        let name = format!("principals-{}", key.identity_provider);
+        let namespace = self.resource_manager.namespace().clone();
+        let labels = btreemap! {
+            self.label_selector_key.clone() => self.label_selector_value.clone()
+        };
+
+        let configmap = match self.get_entities(key.clone()).await {
+            Ok(configmap) => configmap,
+            Err(_e) => Arc::new(models::empty(name, namespace, labels)),
+        };
         let mut active = configmap.get_active_associations()?;
         active.insert(to_key(&key), principal.clone());
 
