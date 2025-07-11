@@ -3,20 +3,24 @@ mod identity_repository;
 pub mod models;
 mod principal_association_repository;
 mod principal_repository;
-mod schema_repository;
 
-use crate::services::backends::base::{Backend, BackendConfiguration, IdentityProviderBackend};
-use crate::services::backends::kubernetes::common::KubernetesResourceManagerConfig;
+use crate::services::backends::base::{
+    EntitiesRepositorySource, IdentityProviderBackend, IdentityRepositorySource, IssuerBackend,
+    PrincipalAssociationRepositorySource,
+};
 use crate::services::backends::kubernetes::identity_repository::KubernetesIdentityRepository;
 use crate::services::backends::kubernetes::principal_association_repository::KubernetesPrincipalAssociationRepository;
 use crate::services::backends::kubernetes::principal_repository::KubernetesPrincipalRepository;
-use crate::services::backends::kubernetes::schema_repository::KubernetesSchemaRepository;
 use crate::services::base::upsert_repository::{
-    IdentityRepository, PrincipalAssociationRepository, PrincipalRepository, SchemaRepository,
+    IdentityRepository, PrincipalAssociationRepository, PrincipalRepository,
 };
 use crate::services::configuration::models::{BackendSettings, KubernetesBackendSettings};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
+use boxer_core::services::backends::kubernetes::kubernetes_resource_manager::KubernetesResourceManagerConfig;
+use boxer_core::services::backends::kubernetes::repositories::schema_repository::KubernetesSchemaRepository;
+use boxer_core::services::backends::{Backend, BackendConfiguration, SchemaRepositorySource};
+use boxer_core::services::base::types::SchemaRepository;
 use kube::config::Kubeconfig;
 use kube::Config;
 use log::{debug, info};
@@ -41,28 +45,42 @@ impl KubernetesBackend {
     }
 }
 
-impl Backend for KubernetesBackend {
+impl SchemaRepositorySource for KubernetesBackend {
     fn get_schemas_repository(&self) -> Arc<SchemaRepository> {
         self.schemas_repository
             .as_ref()
             .expect("Backend is not started")
             .clone()
     }
+}
 
+impl EntitiesRepositorySource for KubernetesBackend {
     fn get_entities_repository(&self) -> Arc<PrincipalRepository> {
         self.entities_repository
             .as_ref()
             .expect("Backend is not started")
             .clone()
     }
+}
 
+impl PrincipalAssociationRepositorySource for KubernetesBackend {
     fn get_principal_association_repository(&self) -> Arc<PrincipalAssociationRepository> {
         self.principal_association_repository
             .as_ref()
             .expect("Backend is not started")
             .clone()
     }
+}
 
+impl Backend for KubernetesBackend {
+    // Nothing here, as this is a marker trait
+}
+
+impl IssuerBackend for KubernetesBackend {
+    // Nothing here, as this is a marker trait
+}
+
+impl IdentityRepositorySource for KubernetesBackend {
     fn get_identity_repository(&self) -> Arc<IdentityRepository> {
         self.identity_repository
             .as_ref()
@@ -85,7 +103,14 @@ impl IdentityProviderBackend for KubernetesBackend {
 
 #[async_trait]
 impl BackendConfiguration for KubernetesBackend {
-    async fn configure(mut self, cm: &BackendSettings, instance_name: String) -> anyhow::Result<Self> {
+    type BackendSettings = BackendSettings;
+    type InitializedBackend = KubernetesBackend;
+
+    async fn configure(
+        mut self,
+        cm: &BackendSettings,
+        instance_name: String,
+    ) -> anyhow::Result<Arc<Self::InitializedBackend>> {
         info!("Kubernetes backend configuration: {:?}", cm);
         let settings = cm
             .kubernetes
@@ -143,7 +168,7 @@ impl BackendConfiguration for KubernetesBackend {
         self.principal_association_repository = Some(Arc::new(principal_association_repository));
         self.identity_repository = Some(Arc::new(identity_repository));
         info!("Kubernetes backend configured successfully");
-        Ok(self)
+        Ok(Arc::new(self))
     }
 }
 

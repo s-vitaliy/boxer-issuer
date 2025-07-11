@@ -1,7 +1,6 @@
-use crate::services::backends::kubernetes::common::{
-    KubernetesResourceManager, KubernetesResourceManagerConfig, ResourceUpdateHandler,
-};
+use crate::services::backends::kubernetes::common::{KubernetesResourceManager, ResourceUpdateHandler};
 use anyhow::Error;
+use boxer_core::services::backends::kubernetes::kubernetes_resource_manager::KubernetesResourceManagerConfig;
 use k8s_openapi::api::coordination::v1::Lease;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use k8s_openapi::NamespaceResourceScope;
