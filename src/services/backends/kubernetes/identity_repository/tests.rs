@@ -1,21 +1,17 @@
 use super::*;
-use k8s_openapi::api::core::v1::Namespace;
-use kube::api::PostParams;
+use crate::services::backends::kubernetes::common::fixtures::{create_mock_identity_providers, get_kubeconfig};
+use boxer_core::testing::create_namespace;
 use kube::{Api, Client};
-use maplit::btreemap;
-use serde_json::json;
-use std::println as info;
 use std::sync::Arc;
 use std::time::Duration;
 use test_context::{test_context, AsyncTestContext};
 use tokio::time::{sleep, timeout};
-use uuid::Uuid;
 
 const DEFAULT_TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[allow(dead_code)] // Dead code is allowed here because this struct is used in kubernetes
 struct KubernetesIdentityRepositoryTest {
-    api: Arc<Api<ConfigMap>>,
+    api: Arc<Api<IdentityProvider>>,
     repository: Arc<KubernetesIdentityRepository>,
 }
 
@@ -24,54 +20,13 @@ const LABEL_SELECTOR_VALUE: &str = "identity-provider";
 
 impl AsyncTestContext for KubernetesIdentityRepositoryTest {
     async fn setup() -> KubernetesIdentityRepositoryTest {
-        let config = super::super::common::fixtures::get_kubeconfig()
-            .await
-            .expect("Failed to get kubeconfig");
+        let namespace = create_namespace().await.expect("Failed to create namespace");
+        let config = get_kubeconfig().await.expect("Failed to create config");
+        let client = Client::try_from(config.clone()).expect("Failed to create client");
 
-        let client = Client::try_from(config.clone()).expect("Failed to create Kubernetes client");
+        let api: Arc<Api<IdentityProvider>> = Arc::new(Api::namespaced(client.clone(), namespace.as_str()));
 
-        let namespace = Uuid::new_v4().to_string();
-        info!("Using namespace: {}", namespace);
-        let namespaces: Api<Namespace> = Api::all(client.clone());
-        let ns = serde_json::from_value(json!({ "metadata": { "name": namespace.clone() } }))
-            .expect("Failed to deserialize namespace");
-        namespaces
-            .create(&PostParams::default(), &ns)
-            .await
-            .expect("Create Namespace failed");
-
-        let api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace.as_str());
-
-        #[rustfmt::skip]
-            let providers = [
-                ("identity-provider-1", vec!["user1", "user2"], vec![]),
-                ("identity-provider-2", vec!["user1"], vec![]),
-                ( "identity-provider-3", vec!["user3"], vec!["user4", "user5", "deleted_user"] ),
-                ("identity-provider-4", vec![], vec![]),
-            ];
-
-        for (provider, active, inactive) in &providers {
-            let data = btreemap! {
-                "active".to_string() => serde_json::to_string(&active).unwrap(),
-                "inactive".to_string() => serde_json::to_string(&inactive).unwrap(),
-            };
-            let config_map = ConfigMap {
-                data: Some(data),
-                metadata: ObjectMeta {
-                    name: Some(provider.to_string()),
-                    namespace: Some(namespace.clone()),
-                    labels: Some(btreemap! {
-                        LABEL_SELECTOR_KEY.to_string() => LABEL_SELECTOR_VALUE.to_string(),
-                        "provider".to_string() => provider.to_string(),
-                    }),
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
-            api.create(&PostParams::default(), &config_map)
-                .await
-                .expect("Failed to create ConfigMap");
-        }
+        create_mock_identity_providers(api.clone(), namespace.clone(), LABEL_SELECTOR_KEY, LABEL_SELECTOR_VALUE).await;
 
         let config = KubernetesResourceManagerConfig {
             namespace: namespace.clone(),
@@ -88,7 +43,7 @@ impl AsyncTestContext for KubernetesIdentityRepositoryTest {
             .expect("Failed to start repository");
 
         KubernetesIdentityRepositoryTest {
-            api: Arc::new(api),
+            api,
             repository: Arc::new(repository),
         }
     }
@@ -243,7 +198,7 @@ async fn test_add_to_unexisted_provider(ctx: &mut KubernetesIdentityRepositoryTe
     // Assert
     let message = result.err().unwrap().to_string();
     assert!(
-        message.contains("Object with name [identity-provider-5] not found"),
+        message.contains("Identity provider \"identity-provider-5\" not found in namespace"),
         "Unexpected error message: {}",
         message
     );
@@ -399,7 +354,7 @@ async fn test_delete_from_unexisted_provider(ctx: &mut KubernetesIdentityReposit
     // Assert
     let message = result.err().unwrap().to_string();
     assert!(
-        message.contains("Object with name [identity-provider-5] not found in namespace"),
+        message.contains("Identity provider \"identity-provider-5\" not found in namespace:"),
         "Unexpected error message: {}",
         message
     );

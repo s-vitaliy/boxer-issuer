@@ -1,23 +1,21 @@
 use super::*;
+use crate::services::backends::kubernetes::common::fixtures::get_kubeconfig;
 use crate::services::backends::kubernetes::principal_repository::test_principal::{principal, updated_principal};
-use k8s_openapi::api::core::v1::{ConfigMap, Namespace};
+use boxer_core::testing::create_namespace;
+use k8s_openapi::api::core::v1::ConfigMap;
 use kube::api::PostParams;
 use kube::{Api, Client};
-use serde_json::json;
-use std::println as info;
 use std::sync::Arc;
 use std::time::Duration;
 use test_context::{test_context, AsyncTestContext};
 use tokio::time::sleep;
-use uuid::Uuid;
 
 #[allow(dead_code)]
 const DEFAULT_TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[allow(dead_code)] // Dead code is allowed here because this struct is used in kubernetes
 struct KubernetesPrincipalRepositoryTest {
-    raw_api: Arc<Api<ConfigMap>>,
-    data_api: Arc<Api<PrincipalConfigMap>>,
+    data_api: Arc<Api<EntitySet>>,
     repository: Arc<KubernetesPrincipalRepository>,
 }
 
@@ -26,25 +24,10 @@ const LABEL_SELECTOR_VALUE: &str = "principal";
 
 impl AsyncTestContext for KubernetesPrincipalRepositoryTest {
     async fn setup() -> KubernetesPrincipalRepositoryTest {
-        let config = super::super::common::fixtures::get_kubeconfig()
-            .await
-            .expect("Failed to get kubeconfig");
-
-        let client = Client::try_from(config.clone()).expect("Failed to create Kubernetes client");
-        let namespace = Uuid::new_v4().to_string();
-        info!("Using namespace: {}", namespace);
-
-        let namespaces: Api<Namespace> = Api::all(client.clone());
-        let namespace_json = json!({ "metadata": { "name": namespace.clone() } });
-        let ns = serde_json::from_value(namespace_json).expect("Failed to deserialize namespace");
-
-        namespaces
-            .create(&PostParams::default(), &ns)
-            .await
-            .expect("Create Namespace failed");
-
-        let raw_api: Api<ConfigMap> = Api::namespaced(client.clone(), namespace.as_str());
-        let data_api: Api<PrincipalConfigMap> = Api::namespaced(client.clone(), namespace.as_str());
+        let namespace = create_namespace().await.expect("Failed to create namespace");
+        let config = get_kubeconfig().await.expect("Failed to create config");
+        let client = Client::try_from(config.clone()).expect("Failed to create client");
+        let data_api: Api<EntitySet> = Api::namespaced(client.clone(), namespace.as_str());
 
         let config = KubernetesResourceManagerConfig {
             namespace: namespace.clone(),
@@ -84,7 +67,6 @@ impl AsyncTestContext for KubernetesPrincipalRepositoryTest {
             .expect("Failed to create ConfigMap");
 
         KubernetesPrincipalRepositoryTest {
-            raw_api: Arc::new(raw_api),
             data_api: Arc::new(data_api),
             repository: Arc::new(repository),
         }
@@ -100,26 +82,29 @@ impl AsyncTestContext for KubernetesPrincipalRepositoryTest {
 async fn test_create_principal(ctx: &mut KubernetesPrincipalRepositoryTest) {
     // Arrange
     let name = "test-schema-entities";
-    let principal_id = PrincipalIdentity::new(name.to_string(), "PhotoApp::User::\"Alice\"".to_string());
+    let entity_uid = "PhotoApp::User::\"alice\"".to_string();
+    let principal_id = PrincipalIdentity::new(name.to_string(), entity_uid);
 
     sleep(Duration::from_secs(1)).await; // Ensure the schema is created before retrieving it
 
     // Act
     ctx.repository
-        .upsert(principal_id, principal(name.to_string()))
+        .upsert(principal_id.clone(), principal(name.to_string()))
         .await
         .expect("Failed to upsert principal");
 
     sleep(Duration::from_secs(1)).await; // Ensure the schema is created before retrieving it
 
     let retrieved_principal = ctx
-        .raw_api
-        .get(&name)
+        .repository
+        .get(principal_id)
         .await
         .expect("Failed to get schema from Kubernetes");
 
     // Assert
-    assert_eq!(retrieved_principal.metadata.name.unwrap(), "test-schema-entities");
+    let expected: String = retrieved_principal.get_entity().uid().to_string();
+    let actual: String = principal(name.to_string()).get_entity().uid().to_string();
+    assert_eq!(expected, actual);
 }
 
 #[test_context(KubernetesPrincipalRepositoryTest)]
@@ -135,13 +120,6 @@ async fn test_delete_principal(ctx: &mut KubernetesPrincipalRepositoryTest) {
         .await
         .expect("Failed to upsert principal");
 
-    let retrieved_principal = ctx
-        .raw_api
-        .get(&name)
-        .await
-        .expect("Failed to get schema from Kubernetes");
-    assert_eq!(retrieved_principal.metadata.name.unwrap(), "test-schema-entities");
-
     // Act
     ctx.repository
         .delete(principal_id.clone())
@@ -154,7 +132,7 @@ async fn test_delete_principal(ctx: &mut KubernetesPrincipalRepositoryTest) {
     let principal_result = ctx.repository.get(principal_id).await;
     assert!(principal_result.is_err(), "Principal should not exist after deletion");
 }
-//
+
 #[test_context(KubernetesPrincipalRepositoryTest)]
 #[tokio::test]
 async fn test_update_schema(ctx: &mut KubernetesPrincipalRepositoryTest) {

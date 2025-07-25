@@ -1,6 +1,7 @@
 #[cfg(test)]
 pub mod fixtures;
 pub mod synchronized_kubernetes_resource_manager;
+pub mod update_handler;
 
 use anyhow::{anyhow, Error};
 use boxer_core::services::backends::kubernetes::kubernetes_resource_manager::KubernetesResourceManagerConfig;
@@ -56,7 +57,7 @@ where
         self.namespace.clone()
     }
 
-    pub async fn replace(&self, _: &str, object: S) -> Result<(), Error> {
+    pub async fn replace(&self, _: &str, object: &mut S) -> Result<(), Error> {
         let object_name = object
             .meta()
             .name
@@ -87,14 +88,8 @@ where
         }
     }
 
-    pub fn get(&self, object_ref: ObjectRef<S>) -> Result<Arc<S>, Error> {
-        self.reader.get(&object_ref).ok_or_else(|| {
-            anyhow!(
-                "Object with name [{}] not found in namespace: {:?}",
-                object_ref.name,
-                object_ref.namespace
-            )
-        })
+    pub fn get(&self, object_ref: ObjectRef<S>) -> Option<Arc<S>> {
+        self.reader.get(&object_ref)
     }
 
     pub fn stop(&self) -> anyhow::Result<()> {
