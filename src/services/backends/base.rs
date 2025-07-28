@@ -1,11 +1,11 @@
 use crate::services::backends::in_memory::InMemoryBackend;
 use crate::services::backends::kubernetes::KubernetesBackend;
-use crate::services::base::upsert_repository::IdentityRepository;
 use crate::services::base::upsert_repository::PrincipalAssociationRepository;
 use crate::services::base::upsert_repository::PrincipalRepository;
+use crate::services::base::upsert_repository::{IdentityProviderRepository, IdentityRepository};
 use crate::services::configuration::models::AppSettings;
+use crate::services::identity_validator_provider::ExternalIdentityValidatorProvider;
 use anyhow::Result;
-use async_trait::async_trait;
 use boxer_core::services::backends::{Backend, BackendConfiguration};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -31,19 +31,25 @@ pub trait IdentityRepositorySource {
     fn get_identity_repository(&self) -> Arc<IdentityRepository>;
 }
 
-#[async_trait]
-pub trait IdentityProviderBackend {
-    async fn register_identity_provider(&self, provider: String) -> Result<()>;
+pub trait IdentityProviderRepositorySource {
+    #[allow(dead_code)]
+    fn get_identity_provider_repository(&self) -> Arc<IdentityProviderRepository>;
+}
+
+pub trait ExternalIdentityValidatorProviderSource {
+    #[allow(dead_code)]
+    fn get_external_identity_validator_provider(&self) -> Arc<dyn ExternalIdentityValidatorProvider>;
 }
 
 pub trait IssuerBackend:
-    Backend
+    Send
+    + Sync
+    + Backend
     + EntitiesRepositorySource
     + PrincipalAssociationRepositorySource
     + IdentityRepositorySource
-    + Send
-    + Sync
-    + IdentityProviderBackend
+    + IdentityProviderRepositorySource
+    + ExternalIdentityValidatorProviderSource
 {
 }
 
@@ -61,8 +67,4 @@ pub async fn load_backend(backend_type: BackendType, cm: &AppSettings) -> Result
         }
     };
     Ok(backend)
-}
-
-pub trait ListRepository<Key, Value> {
-    fn list(&self) -> Result<Vec<(Key, Value)>>;
 }

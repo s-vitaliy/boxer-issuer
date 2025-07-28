@@ -3,6 +3,9 @@ use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(paths(
+    controllers::provider::post,
+    controllers::provider::get,
+    controllers::provider::delete,
     controllers::identity::post,
     controllers::identity::get,
     controllers::identity::delete,

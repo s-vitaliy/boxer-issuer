@@ -17,7 +17,7 @@ struct IdentityAssociation {
     principal_id: String,
 }
 
-#[utoipa::path(context_path = "/association/", responses((status = OK)))]
+#[utoipa::path(context_path = "/association", responses((status = OK)))]
 #[post("/")]
 async fn post(
     request: Json<IdentityAssociation>,
@@ -32,7 +32,7 @@ async fn post(
 }
 
 #[utoipa::path(
-    context_path = "/association/identities",
+    context_path = "/association",
     responses(
         (status = OK, body = IdentityAssociation)
     )
