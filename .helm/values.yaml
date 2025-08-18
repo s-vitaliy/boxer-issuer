@@ -168,47 +168,6 @@ rbac:
       nameOverride: ""
       roleNameOverride: ""
 
-    actionDiscoveryViewer:
-      create: true
-      additionalLabels: { }
-      additionalAnnotations: { }
-      nameOverride: ""
-      roleNameOverride: ""
-
-    actionDiscoveryEditor:
-      create: true
-      additionalLabels: { }
-      additionalAnnotations: { }
-      nameOverride: ""
-      roleNameOverride: ""
-
-    resourceDiscoveryViewer:
-      create: true
-      additionalLabels: { }
-      additionalAnnotations: { }
-      nameOverride: ""
-      roleNameOverride: ""
-
-    resourceDiscoveryEditor:
-      create: true
-      additionalLabels: { }
-      additionalAnnotations: { }
-      nameOverride: ""
-      roleNameOverride: ""
-
-    policySetViewer:
-      create: true
-      additionalLabels: { }
-      additionalAnnotations: { }
-      nameOverride: ""
-      roleNameOverride: ""
-
-    policySetEditor:
-      create: true
-      additionalLabels: { }
-      additionalAnnotations: { }
-      nameOverride: ""
-      roleNameOverride: ""
 
 # The Boxer Issuer configuration
 issuer:
@@ -255,7 +214,7 @@ issuer:
     listenIp: ""
 
     # The port on which the application listens for HTTP requests
-    port: 8080
+    port: 80
 
     # The instance name for the issuer
     # Used to generate the lease name and other instance-specific settings
