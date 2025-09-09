@@ -25,10 +25,20 @@ pub struct BackendSettings {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct TokenSettings {
+    pub issuer: String,
+    pub audience: String,
+    pub key_id: String,
+    pub key: String,
+    pub content_encryption: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct AppSettings {
     pub instance_name: String,
     pub listen_address: SocketAddr,
     pub init: InitializationSettings,
     pub backend: BackendSettings,
     pub opentelemetry: OpenTelemetrySettings,
+    pub token_settings: TokenSettings,
 }

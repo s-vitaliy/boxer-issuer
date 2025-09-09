@@ -23,6 +23,7 @@ use crate::services::identity_validator_provider::ExternalIdentityValidatorProvi
 use crate::services::principal_service::PrincipalService;
 use anyhow::Result;
 use boxer_core::services::audit::log_audit_service::LogAuditService;
+use boxer_core::services::audit::AuditService;
 use boxer_core::services::backends::kubernetes::repositories::schema_repository::SchemaRepository;
 use boxer_core::services::observability::composed_logger::ComposedLogger;
 use boxer_core::services::observability::open_telemetry;
@@ -89,9 +90,13 @@ async fn main() -> Result<()> {
         validator_provider.clone(),
         principal_service.clone(),
         cm.get_signing_key(),
+        cm.get_key_id(),
+        cm.get_audience(),
+        cm.get_issuer(),
+        cm.get_content_encryption(),
     ));
 
-    let audit_service = Arc::new(LogAuditService::new());
+    let audit_service: Arc<dyn AuditService> = Arc::new(LogAuditService::new());
 
     info!(host:? = &cm.listen_address.ip(); "listening on {}:{}", &cm.listen_address.ip(), &cm.listen_address.port());
     HttpServer::new(move || {

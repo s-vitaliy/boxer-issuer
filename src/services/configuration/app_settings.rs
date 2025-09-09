@@ -22,10 +22,25 @@ impl AppSettings {
 #[async_trait]
 impl InitializationConfigurationManager for AppSettings {
     fn get_signing_key(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec!["dummy-secret".as_bytes()].concat())
+        Arc::new(self.token_settings.key.as_bytes().into())
+    }
+
+    fn get_key_id(&self) -> String {
+        self.token_settings.key_id.clone()
     }
 
     fn get_backend_type(&self) -> BackendType {
         self.init.backend_type.clone()
+    }
+
+    fn get_audience(&self) -> String {
+        self.token_settings.audience.clone()
+    }
+
+    fn get_issuer(&self) -> String {
+        self.token_settings.issuer.clone()
+    }
+    fn get_content_encryption(&self) -> String {
+        self.token_settings.content_encryption.clone()
     }
 }
